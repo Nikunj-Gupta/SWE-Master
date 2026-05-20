@@ -59,7 +59,7 @@ Repos covered (with reward==1 counts): `django/django` (10), `matplotlib/matplot
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-mid = "<your-hf-username>/SWE-Master-Coder-3B-SFT-fork"
+mid = "nikunjgupta/SWE-Master-Coder-3B-SFT-fork"
 tok = AutoTokenizer.from_pretrained(mid)
 mdl = AutoModelForCausalLM.from_pretrained(mid, torch_dtype="auto", device_map="auto")
 
@@ -70,7 +70,7 @@ mdl = AutoModelForCausalLM.from_pretrained(mid, torch_dtype="auto", device_map="
 For agent inference at scale you'd serve this with vLLM:
 
 ```bash
-vllm serve <your-hf-username>/SWE-Master-Coder-3B-SFT-fork \
+vllm serve nikunjgupta/SWE-Master-Coder-3B-SFT-fork \
     --tensor-parallel-size 1 \
     --max-model-len 32768
 ```
@@ -86,7 +86,7 @@ vllm serve <your-hf-username>/SWE-Master-Coder-3B-SFT-fork \
 
 All training/inference code, install scripts, and the 56-trajectory training corpus generation pipeline are at:
 
-**`<your-repo-url-here>`** — a fork of [RUCAIBox/SWE-Master](https://github.com/RUCAIBox/SWE-Master).
+**[github.com/Nikunj-Gupta/SWE-Master](https://github.com/Nikunj-Gupta/SWE-Master)** — a fork of [RUCAIBox/SWE-Master](https://github.com/RUCAIBox/SWE-Master).
 
 Run:
 ```bash
