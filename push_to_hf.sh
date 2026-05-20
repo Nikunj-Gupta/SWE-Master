@@ -22,9 +22,9 @@ REPO=$(cd "$(dirname "$0")" && pwd)
 : "${HF_TOKEN:?HF_TOKEN must be set (your HuggingFace write token)}"
 : "${HF_USERNAME:?HF_USERNAME must be set (your HF account/org name)}"
 
-MODEL_DIR="${MODEL_DIR:-$REPO/sft_final/hf}"
-REPO_NAME="${REPO_NAME:-SWE-Master-Coder-3B-SFT-fork}"
-PRIVATE="${PRIVATE:-0}"
+export MODEL_DIR="${MODEL_DIR:-$REPO/sft_final/hf}"
+export REPO_NAME="${REPO_NAME:-SWE-Master-Coder-3B-SFT-fork}"
+export PRIVATE="${PRIVATE:-0}"
 
 if [ ! -d "$MODEL_DIR" ]; then
     echo "ERROR: MODEL_DIR not found: $MODEL_DIR"
