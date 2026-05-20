@@ -16,6 +16,11 @@ GPUS=${GPUS:-0}
 TP_SIZE=${TP_SIZE:-1}
 MAX_MODEL_LEN=${MAX_MODEL_LEN:-16384}
 GPU_MEM=${GPU_MEM:-0.85}
+# vLLM's default max_num_seqs is 256, which forces sampler-warmup buffers
+# for 256 concurrent sequences and can OOM on memory-tight setups
+# (e.g., 30B MoE @ TP=4 on 48GB cards). For agent rollouts we only need
+# ~MAX_WORKERS concurrency. 32 is plenty.
+MAX_NUM_SEQS=${MAX_NUM_SEQS:-32}
 
 # Auto-discover repo root: where this script lives.
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -46,7 +51,7 @@ export LIBRARY_PATH=$CUDA_HOME/lib64/stubs:${LIBRARY_PATH:-}
 echo "==> vllm log:      $LOG"
 echo "==> Model:         $TEACHER_MODEL"
 echo "==> Served as:     $TEACHER_NAME"
-echo "==> GPUs:          $GPUS (TP=$TP_SIZE)  max_model_len=$MAX_MODEL_LEN"
+echo "==> GPUs:          $GPUS (TP=$TP_SIZE)  max_model_len=$MAX_MODEL_LEN  max_num_seqs=$MAX_NUM_SEQS"
 echo "==> Started at $(date -Iseconds)"
 
 # Background launch. Stop with:  kill $(cat $REPO/vllm_venv/vllm.pid)
@@ -56,6 +61,7 @@ nohup vllm serve "$TEACHER_MODEL" \
     --tensor-parallel-size "$TP_SIZE" \
     --gpu-memory-utilization "$GPU_MEM" \
     --max-model-len "$MAX_MODEL_LEN" \
+    --max-num-seqs "$MAX_NUM_SEQS" \
     --served-model-name "$TEACHER_NAME" \
     >> "$LOG" 2>&1 &
 
