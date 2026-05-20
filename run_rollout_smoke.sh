@@ -24,9 +24,25 @@ K=${K:-1}
 MAX_STEPS=${MAX_STEPS:-10}
 MAX_WORKERS=${MAX_WORKERS:-1}
 USE_FN_CALLING=${USE_FN_CALLING:-True}
-USED_YAML=${USED_YAML:-./src/r2egym/agenthub/config/openhands/openhands_sp_fn_calling.yaml}
+USED_YAML=${USED_YAML:-./src/r2egym/agenthub/config/openhands/openhands_sp_non_fn_calling.yaml}
 
-REPO=/data/nikunj/SWE-Master
+# Auto-discover repo root: where this script lives.
+REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+# Required: path to SWE-Bench-Verified dataset (HF-format or load_from_disk-format).
+# Set SWEBENCH_DATASET_PATH in your env, or place the dataset at <repo>/datasets/SWE-Bench-Verified.
+SWEBENCH_DATASET_PATH=${SWEBENCH_DATASET_PATH:-$REPO/datasets/SWE-Bench-Verified}
+if [ ! -d "$SWEBENCH_DATASET_PATH" ]; then
+    echo "ERROR: SWE-Bench-Verified dataset not found at: $SWEBENCH_DATASET_PATH"
+    echo ""
+    echo "Either:"
+    echo "  1. Run 'bash data_preparation/download_swe_datasets.sh' first, then move"
+    echo "     the downloaded dataset to \$REPO/datasets/SWE-Bench-Verified/"
+    echo "  2. Or set SWEBENCH_DATASET_PATH to wherever it lives:"
+    echo "       SWEBENCH_DATASET_PATH=/path/to/SWE-Bench-Verified bash $(basename \"$0\")"
+    exit 1
+fi
+
 LOG_DIR=$REPO/sft_smoke/logs
 mkdir -p "$LOG_DIR"
 TS=$(date +%Y%m%d_%H%M%S)
@@ -66,7 +82,7 @@ python src/r2egym/agenthub/run/edit.py runagent_multiple \
     --max_workers "$MAX_WORKERS" \
     --start_idx "$START_IDX" \
     --k "$K" \
-    --dataset "/data/nikunj/SWE-Master-backup/datasets/SWE-Bench-Verified" \
+    --dataset "$SWEBENCH_DATASET_PATH" \
     --split "test" \
     --llm_name "hosted_vllm/$TEACHER_NAME" \
     --use_fn_calling "$USE_FN_CALLING" \

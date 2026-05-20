@@ -8,14 +8,17 @@ proof-of-life; we are not measuring generalization.
 import argparse
 import pathlib
 
+# Auto-discover repo root: this script lives at <repo>/OpenRLHF_SFT/scripts_swe_master/
+REPO = pathlib.Path(__file__).resolve().parents[2]
+
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--src",
-        default="/data/nikunj/SWE-Master/data_examples/sft_data/openrlhf_sft_multi_turn_data_demo.jsonl",
+        default=str(REPO / "data_examples/sft_data/openrlhf_sft_multi_turn_data_demo.jsonl"),
     )
-    ap.add_argument("--dst", default="/data/nikunj/SWE-Master/sft_smoke/data/demo_x20.jsonl")
+    ap.add_argument("--dst", default=str(REPO / "sft_smoke/data/demo_x20.jsonl"))
     ap.add_argument("--copies", type=int, default=20)
     args = ap.parse_args()
 

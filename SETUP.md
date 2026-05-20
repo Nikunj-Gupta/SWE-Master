@@ -96,7 +96,17 @@ bash data_preparation/download_swe_datasets.sh
 # Then point the run_rollout_smoke.sh DATASET path at where this lands.
 ```
 
-By default our scripts assume `/data/nikunj/SWE-Master-backup/datasets/SWE-Bench-Verified/` — edit this path in `run_rollout_smoke.sh` to match your filesystem.
+By default our scripts look for the dataset at `<repo>/datasets/SWE-Bench-Verified/`. Override via:
+
+```bash
+export SWEBENCH_DATASET_PATH=/path/to/SWE-Bench-Verified
+```
+
+Or move the downloaded dataset into the default location:
+
+```bash
+mv /path/to/downloaded/SWE-Bench-Verified ./datasets/
+```
 
 ---
 
@@ -115,7 +125,7 @@ Runs: vLLM serve → 1-instance rollout smoke → convert → SFT smoke. Good as
 
 **Serve a teacher:**
 ```bash
-export HF_HOME=/where/you/want/the/model/cache    # optional, defaults to /data/nikunj/hf_cache
+export HF_HOME=/where/you/want/the/model/cache    # optional, defaults to <repo>/hf_cache
 TEACHER_MODEL=RUC-AIBOX/SWE-Master-32B-SFT \
 TEACHER_NAME=swe-master-32b-sft \
 GPUS=0,1,2,3,4,5,6,7 \

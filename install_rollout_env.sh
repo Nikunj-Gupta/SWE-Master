@@ -8,7 +8,8 @@
 # in ONE call gives uv the full constraint set up front.
 set -euo pipefail
 
-REPO=/data/nikunj/SWE-Master
+# Auto-discover repo root: where this script lives.
+REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 LOG_DIR=$REPO/sft_smoke/logs
 mkdir -p "$LOG_DIR"
 TS=$(date +%Y%m%d_%H%M%S)
@@ -52,16 +53,13 @@ python - <<'PY'
 import r2egym
 from r2egym.agenthub.agent.agent import Agent, AgentArgs
 from r2egym.agenthub.environment.env import EnvArgs, RepoEnv
-from datasets import load_dataset
 from importlib.metadata import version
 for p in ['r2e-gym','litellm','swebench','transformers','huggingface_hub','numpy','pandas','pyarrow','openai','datasets','scipy','scikit-learn']:
     try: print(f"{p:18s} {version(p)}")
     except Exception as e: print(f"{p:18s} <err {e}>")
-ds = load_dataset("/data/nikunj/SWE-Master-backup/datasets/SWE-Bench-Verified", split="test")
-print(f"dataset len     {len(ds)}")
-print(f"first id        {ds[0]['instance_id']}")
-print(f"first image     {ds[0]['docker_image']}")
 print("Agent + Env classes import OK")
+print("(Note: dataset load is intentionally NOT tested here — set SWEBENCH_DATASET_PATH")
+print(" before running run_rollout_smoke.sh.)")
 PY
 
 echo "==> Done at $(date -Iseconds)"

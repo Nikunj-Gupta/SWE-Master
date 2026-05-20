@@ -6,7 +6,8 @@
 # successful 6-trajectory run. 56 unique × 5 reps = 280 training samples.
 set -euo pipefail
 
-REPO=/data/nikunj/SWE-Master
+# Auto-discover repo root: this script lives at <repo>/OpenRLHF_SFT/scripts_swe_master/
+REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 OUT=$REPO/sft_final
 
 # shellcheck disable=SC1091

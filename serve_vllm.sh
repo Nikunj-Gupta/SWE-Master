@@ -17,7 +17,8 @@ TP_SIZE=${TP_SIZE:-1}
 MAX_MODEL_LEN=${MAX_MODEL_LEN:-16384}
 GPU_MEM=${GPU_MEM:-0.85}
 
-REPO=/data/nikunj/SWE-Master
+# Auto-discover repo root: where this script lives.
+REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 LOG_DIR=$REPO/sft_smoke/logs
 mkdir -p "$LOG_DIR"
 TS=$(date +%Y%m%d_%H%M%S)
@@ -29,8 +30,11 @@ source "$REPO/vllm_venv/bin/activate"
 
 # Pin teacher to the requested GPU(s).
 export CUDA_VISIBLE_DEVICES=$GPUS
-# Re-use the SFT-side HF cache so the model is already on disk.
-export HF_HOME=${HF_HOME:-/data/nikunj/hf_cache}
+# Re-use a shared HF cache so the model is already on disk between runs.
+# Default to <repo>/hf_cache for portability; override by exporting HF_HOME
+# (recommended: point to a partition with ≥ 300 GB free).
+export HF_HOME=${HF_HOME:-$REPO/hf_cache}
+mkdir -p "$HF_HOME"
 
 # vLLM's inductor pipeline JIT-compiles a Triton helper that links against
 # -lcuda. The system has libcuda.so.1 (driver) but no build-time libcuda.so

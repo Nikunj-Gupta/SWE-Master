@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Install vLLM in its own venv at /data/nikunj/SWE-Master/vllm_venv.
+# Install vLLM in its own venv at <repo>/vllm_venv.
 # Kept separate from the OpenRLHF SFT and R2E-Gym client venvs so each can
 # pin its own torch / transformers / huggingface_hub without colliding.
 set -euo pipefail
 
-REPO=/data/nikunj/SWE-Master
+# Auto-discover repo root: where this script lives.
+REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 LOG_DIR=$REPO/sft_smoke/logs
 mkdir -p "$LOG_DIR"
 TS=$(date +%Y%m%d_%H%M%S)

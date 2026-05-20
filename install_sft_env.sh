@@ -6,7 +6,8 @@
 # Assumes: nvcc 12.x available, uv on PATH, internet access for PyPI/GitHub.
 set -euo pipefail
 
-REPO=/data/nikunj/SWE-Master
+# Auto-discover repo root: where this script lives.
+REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 LOG_DIR=$REPO/sft_smoke/logs
 mkdir -p "$LOG_DIR"
 TS=$(date +%Y%m%d_%H%M%S)

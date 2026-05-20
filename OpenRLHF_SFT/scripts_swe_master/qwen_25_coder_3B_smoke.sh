@@ -12,7 +12,8 @@
 #   - deepspeed/runtime/engine.py: short-circuit `grad / gas` when gas==1
 set -euo pipefail
 
-REPO=/data/nikunj/SWE-Master
+# Auto-discover repo root: this script lives at <repo>/OpenRLHF_SFT/scripts_swe_master/
+REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 OUT=$REPO/sft_smoke
 
 # shellcheck disable=SC1091

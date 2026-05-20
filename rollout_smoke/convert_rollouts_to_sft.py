@@ -11,17 +11,21 @@ Writes two files:
   <prefix>.openrlhf.filtered.jsonl reward==1 only — SFT-ready
 """
 import argparse
+import importlib.util
 import json
 import sys
 from pathlib import Path
 
-# Re-use the FC_SP constant + conversion logic from the repo script
-sys.path.insert(0, "/data/nikunj/SWE-Master/OpenRLHF_SFT/SFT_data_pre_process/r2e_to_openrlhf_format")
-import importlib.util
-spec = importlib.util.spec_from_file_location(
-    "convert_r2e",
-    "/data/nikunj/SWE-Master/OpenRLHF_SFT/SFT_data_pre_process/r2e_to_openrlhf_format/0_covert_r2e_format_to_sft_foramt.py",
+# Auto-discover repo root: this script lives at <repo>/rollout_smoke/
+REPO = Path(__file__).resolve().parents[1]
+_CONVERT_SCRIPT = (
+    REPO / "OpenRLHF_SFT/SFT_data_pre_process/r2e_to_openrlhf_format/"
+    "0_covert_r2e_format_to_sft_foramt.py"
 )
+
+# Re-use the FC_SP constant + conversion logic from the repo script
+sys.path.insert(0, str(_CONVERT_SCRIPT.parent))
+spec = importlib.util.spec_from_file_location("convert_r2e", str(_CONVERT_SCRIPT))
 convert_r2e = importlib.util.module_from_spec(spec)
 # The original script runs main code on import (under `if __name__ == "__main__"` so it's safe).
 spec.loader.exec_module(convert_r2e)
