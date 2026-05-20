@@ -195,8 +195,11 @@ class DockerRuntime(ExecutionEnvironment):
             from swebench_fork_swegym.harness.test_spec import TestSpec
             if "make_test_spec" in self.ds:
                 self.logger.info("self.ds has make_test_spec, read directly")
-                make_test_spec = json.loads(self.ds['make_test_spec'])
-                self.test_spec = TestSpec(**make_test_spec)
+                # Renamed local var so it doesn't shadow the module-level
+                # `make_test_spec` function (Python marks the name local for
+                # the whole function and breaks the else branch).
+                spec_data = json.loads(self.ds['make_test_spec'])
+                self.test_spec = TestSpec(**spec_data)
                 self.logger.info("has successfully read test_spec")
             
             else:
@@ -219,10 +222,15 @@ class DockerRuntime(ExecutionEnvironment):
             from swebench.harness.test_spec.test_spec import TestSpec
             if "make_test_spec" in self.ds:
                 self.logger.info("self.ds has make_test_spec, read directly")
-                make_test_spec = json.loads(self.ds['make_test_spec'])
-                self.test_spec = TestSpec(**make_test_spec)
+                # Renamed local var so it doesn't shadow the module-level
+                # `make_test_spec` function imported at line 35. The else
+                # branch below calls that function; without rename, Python
+                # treats `make_test_spec` as local-everywhere and the else
+                # branch raises UnboundLocalError.
+                spec_data = json.loads(self.ds['make_test_spec'])
+                self.test_spec = TestSpec(**spec_data)
                 self.logger.info("has successfully read test_spec")
-                
+
             else:
                 self.cache_file = base_dir / "swe_bench_verified" /f"{self.instance_id}.json"
                 self.logger.info(f"this is dockerruntime cache_file: \n{self.cache_file}")
@@ -241,8 +249,11 @@ class DockerRuntime(ExecutionEnvironment):
             from swebench_fork_swerebench.harness.test_spec.test_spec import TestSpec
             if "make_test_spec" in self.ds:
                 self.logger.info("self.ds has make_test_spec, read directly")
-                make_test_spec = json.loads(self.ds['make_test_spec'])
-                self.test_spec = TestSpec(**make_test_spec)
+                # Renamed local var so it doesn't shadow the module-level
+                # `make_test_spec` function (Python marks the name local for
+                # the whole function and breaks the else branch).
+                spec_data = json.loads(self.ds['make_test_spec'])
+                self.test_spec = TestSpec(**spec_data)
                 self.logger.info("has successfully read test_spec")
                 
             else:
@@ -275,13 +286,23 @@ class DockerRuntime(ExecutionEnvironment):
 
 
         self.ip = ip
-        self.docker_host = r"tcp://" + self.ip + r":2375"
+        # Use the Unix socket for local Docker — the default daemon listens
+        # only on /var/run/docker.sock and not TCP 2375. Override only for
+        # remote IPs where TCP 2375 is the right endpoint.
+        if ip in ("127.0.0.1", "localhost"):
+            self.docker_host = "unix:///var/run/docker.sock"
+        else:
+            self.docker_host = "tcp://" + self.ip + ":2375"
         custom_env = {
-            'DOCKER_HOST': self.docker_host, 
-            'DOCKER_TLS_VERIFY': DOCKER_TLS_VERIFY, 
-            'DOCKER_CERT_PATH': DOCKER_CERT_PATH, 
-            # 'DOCKER_API_VERSION': '1.40' 
+            'DOCKER_HOST': self.docker_host,
+            # 'DOCKER_API_VERSION': '1.40'
         }
+        # Only set TLS env vars for remote TCP daemons. With the Unix socket,
+        # DOCKER_TLS_VERIFY=1 makes docker-py demand a cert path that doesn't
+        # exist on local boxes.
+        if self.ip not in ("127.0.0.1", "localhost"):
+            custom_env['DOCKER_TLS_VERIFY'] = DOCKER_TLS_VERIFY
+            custom_env['DOCKER_CERT_PATH'] = DOCKER_CERT_PATH
         print("=docker-ip="*20)
         print(f"connection to docker, use ip:{self.ip}, docker_host:{self.docker_host}")
         self.logger.info(f"connection to docker, use ip:{self.ip}, docker_host:{self.docker_host}")
@@ -688,7 +709,7 @@ class DockerRuntime(ExecutionEnvironment):
             self.run(f"ln -s /opt/miniconda3/envs/testbed /root/.venv")
             self.run('echo \'export PATH="/usr/local/bin:$PATH"\' >> ~/.bashrc')
             # self.run("pip install chardet")
-            self.run("pip install chardet --trusted-host pypi-mirror.weizhipin.com -i http://pypi-mirror.weizhipin.com/bzl-aliyun-pypi/simple")
+            self.run("pip install chardet")
             check_chardet_num_all = 3
             for check_chardet_num in range(check_chardet_num_all):
                 result_check_chardet = self.run(
@@ -739,7 +760,7 @@ class DockerRuntime(ExecutionEnvironment):
             self.run(f"ln -s /opt/miniconda3/envs/testbed /root/.venv")
             self.run('echo \'export PATH="/usr/local/bin:$PATH"\' >> ~/.bashrc')
             # self.run("pip install chardet")
-            self.run("pip install chardet --trusted-host pypi-mirror.weizhipin.com -i http://pypi-mirror.weizhipin.com/bzl-aliyun-pypi/simple")
+            self.run("pip install chardet")
             check_chardet_num_all = 3
             for check_chardet_num in range(check_chardet_num_all):
                 result_check_chardet = self.run(
@@ -848,7 +869,7 @@ class DockerRuntime(ExecutionEnvironment):
             # self.run(
             #     "python -m pip install tree-sitter==0.20.4 tree_sitter_languages==1.10.2"
             # )
-            self.run("pip install chardet --trusted-host pypi-mirror.weizhipin.com -i http://pypi-mirror.weizhipin.com/bzl-aliyun-pypi/simple")
+            self.run("pip install chardet")
 
             check_chardet_num_all = 3
             for check_chardet_num in range(check_chardet_num_all):

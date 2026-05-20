@@ -157,7 +157,7 @@ class Agent:
         if "deepseek" in summary_llm_name:
             lite_llm_max_token = 8192
         else:
-            lite_llm_max_token = 16384
+            lite_llm_max_token = 4096  # Lowered from 16384 to fit with 16K total context
 
         start_time = time.time()
         
@@ -219,7 +219,7 @@ class Agent:
         if "deepseek" in self.llm_name.lower() or "qwen25-32b" in self.llm_name.lower():
             lite_llm_max_token = 8192
         else:
-            lite_llm_max_token = 16384
+            lite_llm_max_token = 4096  # Lowered from 16384 to fit with 16K total context
 
         # Configure tools based on the selected scaffold/framework
         if self.use_fn_calling:
