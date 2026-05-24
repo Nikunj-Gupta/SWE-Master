@@ -153,12 +153,15 @@ PATCHES = [
             "        # Use the Unix socket for local Docker — the default daemon listens\n"
             "        # only on /var/run/docker.sock and not TCP 2375. Override only for\n"
             "        # remote IPs where TCP 2375 is the right endpoint.\n"
-            "        if ip in (\"127.0.0.1\", \"localhost\"):\n"
+            "        # Empty ip (\"\") also routes to the local unix socket: rllm's RL\n"
+            "        # trainer constructs envs without threading --ip through, so the\n"
+            "        # default has to be local.\n"
+            "        if not ip or ip in (\"127.0.0.1\", \"localhost\"):\n"
             "            self.docker_host = \"unix:///var/run/docker.sock\"\n"
             "        else:\n"
             "            self.docker_host = \"tcp://\" + self.ip + \":2375\""
         ),
-        "reason": "Use Unix socket for local Docker (TCP 2375 not enabled by default)",
+        "reason": "Use Unix socket for local Docker (TCP 2375 not enabled by default; empty ip → local)",
     },
     {
         "id": "r2egym_skip_tls_local",
@@ -179,8 +182,8 @@ PATCHES = [
             "        }\n"
             "        # Only set TLS env vars for remote TCP daemons. With the Unix socket,\n"
             "        # DOCKER_TLS_VERIFY=1 makes docker-py demand a cert path that doesn't\n"
-            "        # exist on local boxes.\n"
-            "        if self.ip not in (\"127.0.0.1\", \"localhost\"):\n"
+            "        # exist on local boxes. Empty ip is treated as local (see above).\n"
+            "        if self.ip and self.ip not in (\"127.0.0.1\", \"localhost\"):\n"
             "            custom_env['DOCKER_TLS_VERIFY'] = DOCKER_TLS_VERIFY\n"
             "            custom_env['DOCKER_CERT_PATH'] = DOCKER_CERT_PATH"
         ),

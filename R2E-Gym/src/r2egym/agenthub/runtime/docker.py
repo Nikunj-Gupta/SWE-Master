@@ -289,7 +289,10 @@ class DockerRuntime(ExecutionEnvironment):
         # Use the Unix socket for local Docker — the default daemon listens
         # only on /var/run/docker.sock and not TCP 2375. Override only for
         # remote IPs where TCP 2375 is the right endpoint.
-        if ip in ("127.0.0.1", "localhost"):
+        # Empty ip ("") also routes to the local unix socket: rllm's RL
+        # trainer constructs envs without threading --ip through, so the
+        # default has to be local.
+        if not ip or ip in ("127.0.0.1", "localhost"):
             self.docker_host = "unix:///var/run/docker.sock"
         else:
             self.docker_host = "tcp://" + self.ip + ":2375"
@@ -300,7 +303,7 @@ class DockerRuntime(ExecutionEnvironment):
         # Only set TLS env vars for remote TCP daemons. With the Unix socket,
         # DOCKER_TLS_VERIFY=1 makes docker-py demand a cert path that doesn't
         # exist on local boxes.
-        if self.ip not in ("127.0.0.1", "localhost"):
+        if self.ip and self.ip not in ("127.0.0.1", "localhost"):
             custom_env['DOCKER_TLS_VERIFY'] = DOCKER_TLS_VERIFY
             custom_env['DOCKER_CERT_PATH'] = DOCKER_CERT_PATH
         print("=docker-ip="*20)
