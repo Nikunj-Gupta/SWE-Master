@@ -24,14 +24,24 @@ def main(config):
 def run_ppo_agent(config):
     if not ray.is_initialized():
         # this is for local ray cluster
-        ray.init(runtime_env={"pip": ["sentence_transformers",'polars',"swebench==3.0.2","dm-tree","gym>=0.26.2","kubernetes>=32.0.1","fire",
-        "./swebench_fork_swegym-2.0.13-py3-none-any.whl",
-        "./swebench_fork_swerebench-4.0.3-py3-none-any.whl",
-        "./swesmith-0.0.7-py3-none-any.whl","simple-parsing>=0.1.6",
-        "together>=1.3.5","markdown>=3.7","pexpect>=4.9.0","libtmux>=0.40.1","bashlex>=0.18","google-cloud-aiplatform>=1.77.0","litellm>=1.58.2",
-        "seaborn>=0.13.2","orjson>=3.10.18","gpustat>=1.1.1"],
-                "working_dir": "./DeepSWE_RL/rllm/verl",
-            "env_vars": {"TOKENIZERS_PARALLELISM": "true", "NCCL_DEBUG": "WARN", "PYTHONPATH": "./DeepSWE_RL/rllm", "WANDB_API_KEY": "xx"}})
+        # patched-by: patch_rllm_ray_init.py
+        # Build env_vars: fixed defaults + selected inheritances from the
+        # parent shell. The inherited keys are critical for vLLM's Inductor
+        # JIT compile path (needs CUDA_HOME, LIBRARY_PATH=$CUDA_HOME/lib64/stubs
+        # to link `-lcuda`, LD_LIBRARY_PATH for the cu* runtime libs).
+        _ray_env = {"TOKENIZERS_PARALLELISM": "true",
+                    "NCCL_DEBUG": "WARN",
+                    "PYTHONPATH": "./DeepSWE_RL/rllm"}
+        for _k in ("CUDA_HOME", "LIBRARY_PATH", "LD_LIBRARY_PATH",
+                   "HF_HOME", "TRITON_CACHE_DIR", "TORCH_EXTENSIONS_DIR",
+                   "VLLM_USE_V1", "VLLM_ATTENTION_BACKEND",
+                   "VLLM_ENGINE_ITERATION_TIMEOUT_S",
+                   "PYTORCH_CUDA_ALLOC_CONF"):
+            _v = os.environ.get(_k)
+            if _v is not None:
+                _ray_env[_k] = _v
+        ray.init(runtime_env={"working_dir": "./DeepSWE_RL/rllm/verl",
+                              "env_vars": _ray_env})
 
     # output_log = "./rl_env_no_uv_new.txt"
     # print(ray.get(check_worker_env.remote(output_log)))
