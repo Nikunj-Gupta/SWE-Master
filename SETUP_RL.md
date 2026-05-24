@@ -161,6 +161,72 @@ share verbatim.
 
 ---
 
+## Performance on 2 GPUs (read before scaling up step counts)
+
+The dry-run + small-batch real run on 2× H100 80GB with Qwen2.5-Coder-1.5B-Instruct,
+`agent.max_steps=3`, `batch_size=2` measured per-step wall as follows:
+
+| Step | collect_trajectory | log_prob | adv | update_actor | TOTAL |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 36.0 s | 0.7 | 0.7 | 5.9 | 42.7 |
+| 5 | 63.1 s | 0.5 | 0.5 | 1.2 | 64.7 |
+| 9 | 118.8 s | 0.4 | 0.4 | 1.2 | 120.5 |
+
+**~95 % of every step is the rollout** (`collect_trajectory`). Gradient compute
+(`update_actor` + `log_prob` + `adv`) is ~2 s total. So no FSDP / optimizer
+/ kernel tuning meaningfully helps; the rollout is the wall.
+
+Why the rollout dominates: each step runs `batch_size × agent.max_steps`
+LLM generations interleaved with docker-container tool calls. With
+`batch_size=2`, `agent.max_steps=3`, that's 6 LLM completions per step (2 in
+parallel via `max_concurrency=2`), each followed by an in-container shell
+turn, plus a `run_tests.sh` for the reward. LLM time per trajectory varies
+2 s ↔ 33 s purely based on which bug-instance got picked (Qwen-Coder-1.5B's
+response length is the dominant cost — `gpu_memory_utilization=0.45` caps
+vLLM's KV cache so concurrent prefill is limited).
+
+**This is inherent to "real-bug docker rollouts on 2 GPUs."** The reference
+`deepswe_32b.sh` uses **64 GPUs** (8 nodes × 8) with `n=8` rollouts per prompt
+— ~32× the parallelism. Walltime on 2 GPUs is in expected territory for the
+hardware.
+
+### Knobs that help (ranked by speedup)
+
+| Knob | Change | Expected speedup | Cost |
+|---|---|---:|---|
+| `AGENT_MAX_STEPS` | 3 → 1 | **~3×** | shallower agent — fewer chances to solve |
+| `RESP_LEN` | 8192 → 2048 | ~1.3× | rare hard bugs get truncated |
+| `gpu_memory_utilization` (in script) | 0.45 → 0.7 | ~1.1× | tighter on FSDP — may OOM with bigger contexts |
+| `BATCH_SIZE` | 2 → 1 | ~2× per-step wall | half the gradient signal per step |
+
+Combined fast-knob example (smoke only — no actual learning):
+
+```bash
+AGENT_MAX_STEPS=1 RESP_LEN=2048 BATCH_SIZE=1 bash run_rl_dryrun.sh
+```
+
+This gets per-step wall down to ~10–15 s, but with a 1.5B-Coder model on
+hard SWE bugs in 1 turn, reward stays 0 and there's no learning signal
+either way.
+
+### When you actually need real RL
+
+The pipeline this repo ships **runs correctly** on 2 GPUs — proven by the
+green dry-run smoke. For real training (loss curves with structure,
+non-zero rewards, multi-hundred-step convergence) you want:
+
+- ≥ 8 GPUs so multiple `rollout.n` and bigger `train_batch_size` are
+  feasible without the rollout-step bottleneck
+- A larger student (7B+) that can occasionally solve SWE-Bench instances
+- Days of wall time, not hours
+
+The setup itself does not change — same `install_rl_env.sh`, same
+`apply_patches_rl.sh`, same patches. Just edit the knobs in
+`run_rl_dryrun.sh` (or copy it to a new script and bump `TOTAL_STEPS`,
+`BATCH_SIZE`, `N_GPUS`, etc.) on the bigger box.
+
+---
+
 ## Resolved: rollout wake_up (was AttributeError on RayWorkerGroup)
 
 Earlier dry-run runs failed at the first rollout batch with:
