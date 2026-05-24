@@ -40,4 +40,15 @@ export PATH=$HOME/.local/bin:$CUDA_HOME/bin:$PATH
 # Without this you'll see: `/usr/bin/ld: cannot find -lcuda`.
 export LIBRARY_PATH=$CUDA_HOME/lib64/stubs:${LIBRARY_PATH:-}
 
+# If this user has rootless docker set up, route docker traffic to the
+# per-user socket so images / overlay2 storage land under that user's
+# data-root (e.g. /data/$USER/docker) instead of the system /var/lib/docker.
+# Only activates when a rootless socket actually exists; otherwise we leave
+# DOCKER_HOST unset and docker-py falls back to the system socket.
+_rootless_sock="/run/user/$(id -u 2>/dev/null)/docker.sock"
+if [ -S "$_rootless_sock" ]; then
+    export DOCKER_HOST="unix://$_rootless_sock"
+fi
+unset _rootless_sock
+
 unset _env_dir

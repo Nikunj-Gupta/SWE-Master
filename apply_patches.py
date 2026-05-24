@@ -156,12 +156,18 @@ PATCHES = [
             "        # Empty ip (\"\") also routes to the local unix socket: rllm's RL\n"
             "        # trainer constructs envs without threading --ip through, so the\n"
             "        # default has to be local.\n"
+            "        # If DOCKER_HOST is set in the environment (e.g. rootless docker:\n"
+            "        # unix:///run/user/$UID/docker.sock), honour it instead of the\n"
+            "        # system socket. This lets users keep all docker writes on a\n"
+            "        # per-user data-root without touching the system daemon.\n"
             "        if not ip or ip in (\"127.0.0.1\", \"localhost\"):\n"
-            "            self.docker_host = \"unix:///var/run/docker.sock\"\n"
+            "            self.docker_host = os.environ.get(\n"
+            "                \"DOCKER_HOST\", \"unix:///var/run/docker.sock\"\n"
+            "            )\n"
             "        else:\n"
             "            self.docker_host = \"tcp://\" + self.ip + \":2375\""
         ),
-        "reason": "Use Unix socket for local Docker (TCP 2375 not enabled by default; empty ip → local)",
+        "reason": "Use Unix socket for local Docker (TCP 2375 not enabled; empty ip → local; honour DOCKER_HOST for rootless)",
     },
     {
         "id": "r2egym_skip_tls_local",

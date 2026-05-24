@@ -292,8 +292,14 @@ class DockerRuntime(ExecutionEnvironment):
         # Empty ip ("") also routes to the local unix socket: rllm's RL
         # trainer constructs envs without threading --ip through, so the
         # default has to be local.
+        # If DOCKER_HOST is set in the environment (e.g. rootless docker:
+        # unix:///run/user/$UID/docker.sock), honour it instead of the
+        # system socket. This lets users keep all docker writes on a
+        # per-user data-root without touching the system daemon.
         if not ip or ip in ("127.0.0.1", "localhost"):
-            self.docker_host = "unix:///var/run/docker.sock"
+            self.docker_host = os.environ.get(
+                "DOCKER_HOST", "unix:///var/run/docker.sock"
+            )
         else:
             self.docker_host = "tcp://" + self.ip + ":2375"
         custom_env = {
