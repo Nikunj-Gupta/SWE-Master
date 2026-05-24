@@ -112,16 +112,7 @@ python examples/swe/prepare_swe_data.py
 
 Downloads 6 HF datasets (~3 GB) and writes parquets under
 `DeepSWE_RL/rllm/rllm/data/datasets/<NAME>/{train,test}_verl.parquet`.
-
-Also generate R2E-Gym data with synthesized `instance_id`s (needed because
-R2E-Gym's agent does `ds["instance_id"][:5]` on the dataset, but R2E-Gym-Subset
-shards don't ship an `instance_id` column):
-
-```bash
-python data_preparation/r2egym_add_instance_id.py
-```
-
-Writes to `datasets/R2E-Gym-Subset-with-id/`.
+These are the only data artifacts the RL trainer needs.
 
 ---
 

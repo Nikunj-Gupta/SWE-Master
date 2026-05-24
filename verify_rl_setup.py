@@ -153,12 +153,6 @@ def main() -> int:
         fails += check(f.exists(), f"{name}/{kind}",
                        f"{f.stat().st_size // (1024*1024)} MB" if f.exists() else "missing — run prepare_swe_data.py")
 
-    section("R2E-Gym dataset with synthesized instance_ids (for r2egym rollout agent)")
-    r2e_with_id = REPO / "datasets" / "R2E-Gym-Subset-with-id"
-    fails += check(r2e_with_id.is_dir(),
-                   "datasets/R2E-Gym-Subset-with-id",
-                   "" if r2e_with_id.is_dir() else "run `python data_preparation/r2egym_add_instance_id.py`")
-
     section("Docker daemon (needed for sweagent rollouts)")
     try:
         out = subprocess.run(["docker", "info"], capture_output=True, text=True, timeout=5)
