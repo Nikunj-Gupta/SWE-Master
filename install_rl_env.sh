@@ -72,7 +72,21 @@ echo "==> Installing build essentials"
 uv pip install wheel packaging ninja numpy 'setuptools<81'
 
 # --------------------------------------------------------------------
-# 4. Install verl (editable). Uses already-installed torch + vllm.
+# 3b. Build flash-attn FROM SOURCE against the just-installed torch.
+#     If we let verl's editable install resolve it transitively, uv
+#     picks the prebuilt flash-attn 2.8.3 wheel (built against torch
+#     2.7) → ABI mismatch at import time with our torch 2.8+cu128:
+#     `undefined symbol: _ZN3c104cuda29c10_cuda_check_implementation...`
+#     Installing it explicitly first with --no-build-isolation forces
+#     a source build that links against the venv's actual torch.
+#     ~5-10 min compile.
+# --------------------------------------------------------------------
+echo "==> Building flash-attn from source against installed torch"
+uv pip install --no-build-isolation --no-cache-dir flash-attn
+
+# --------------------------------------------------------------------
+# 4. Install verl (editable). Uses already-installed torch + vllm
+#    + flash-attn (we pre-built above, uv will leave it alone).
 # --------------------------------------------------------------------
 echo "==> Installing verl (editable)"
 (cd rllm/verl && uv pip install -e . --no-build-isolation)
