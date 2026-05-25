@@ -132,6 +132,24 @@ uv pip install --no-deps \
     "$REPO/swebench_fork_swerebench-4.0.3-py3-none-any.whl" \
     "$REPO/swesmith-0.0.7-py3-none-any.whl"
 
+# swesmith.profiles imports swesmith.bug_gen.adapters at module load, which
+# unconditionally imports every language adapter (c/cpp/go/js/php/ruby/rust/...).
+# Each pulls its tree_sitter_<lang> binding. The --no-deps above skips them,
+# so the trainer crashes on `import r2egym.agenthub.environment.env` at
+# `from swesmith.bug_gen.adapters.c import ...`. Install them explicitly.
+echo "==> Installing tree-sitter bindings needed by swesmith.bug_gen.adapters"
+uv pip install --no-deps \
+    'tree-sitter>=0.25' \
+    tree-sitter-c \
+    tree-sitter-cpp \
+    tree-sitter-c-sharp \
+    tree-sitter-go \
+    tree-sitter-java \
+    tree-sitter-javascript \
+    'tree-sitter-php>=0.23.11' \
+    tree-sitter-ruby \
+    tree-sitter-rust
+
 # --------------------------------------------------------------------
 # 9. Install r2egym as a proper package (--no-deps to keep our cu126
 #    stack intact). The trainer imports r2egym for the sweagent rollout.
