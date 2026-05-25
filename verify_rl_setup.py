@@ -54,9 +54,22 @@ def main() -> int:
     fails = 0
 
     section("System prerequisites")
-    fails += check(shutil.which("nvcc") is not None, "nvcc on PATH",
+    nvcc_path = shutil.which("nvcc")
+    fails += check(nvcc_path is not None, "nvcc on PATH",
                    subprocess.run(["nvcc", "--version"], capture_output=True, text=True).stdout.splitlines()[-1]
-                   if shutil.which("nvcc") else "")
+                   if nvcc_path else "")
+    # Hard-check the nvcc release matches our pinned cu126 torch.
+    if nvcc_path:
+        try:
+            out = subprocess.run(["nvcc", "--version"], capture_output=True, text=True).stdout
+            import re
+            m = re.search(r"release (\d+\.\d+)", out)
+            nvcc_rel = m.group(1) if m else "?"
+            fails += check(nvcc_rel == "12.6",
+                           f"nvcc release {nvcc_rel}",
+                           "must be 12.6.x — torch is hard-pinned to cu126")
+        except Exception as e:
+            fails += check(False, "nvcc version parse", f"{type(e).__name__}: {e}")
     try:
         n_gpus = int(subprocess.check_output(
             ["nvidia-smi", "--query-gpu=index", "--format=csv,noheader"]
@@ -82,7 +95,7 @@ def main() -> int:
         os.execv(str(venv_python), [str(venv_python), __file__])  # never returns
 
     for pkg, expect in [
-        ("torch", "≥2.7+cu126/cu128"),
+        ("torch", "==2.8.0+cu126 (hard-pinned)"),
         ("vllm", "≥0.8.3,<0.11 (verl-compat)"),
         ("rllm", "editable from DeepSWE_RL/rllm"),
         ("verl", "editable from DeepSWE_RL/rllm/verl"),
@@ -98,6 +111,12 @@ def main() -> int:
         if pkg == "torch" and ok:
             import torch
             info = f"{torch.__version__}  cuda={torch.version.cuda}  gpus={torch.cuda.device_count()}"
+            # Hard fail if torch's bundled cuda isn't 12.6 — running with
+            # a cu128/cu13x wheel against an nvcc 12.6 host is the exact
+            # failure mode that surfaced on the other server.
+            fails += check(torch.version.cuda == "12.6",
+                           f"torch.version.cuda == 12.6",
+                           f"got {torch.version.cuda} — re-run install_rl_env.sh; cu126 pin was lost")
         fails += check(ok, f"{pkg} {info}", f"expect {expect}")
 
     section("Legacy vllm imports verl requires (broken on vllm ≥0.13)")

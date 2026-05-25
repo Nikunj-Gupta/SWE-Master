@@ -6,9 +6,12 @@
 # actually needs at runtime.
 #
 # Pinning notes:
-#   - torch:  cu126 channel (>=2.7,<2.9). Matches our existing CUDA toolkit
-#             and vllm's expected runtime. Newer cu13 torch will be silently
-#             pulled by unbounded pyproject deps if we don't pin first.
+#   - torch:  hard-pinned to torch==2.8.0+cu126. The +cu126 local-version
+#             label is exclusive to the pytorch.org cu126 channel; if any
+#             subsequent uv resolve tried to substitute a plain (cu128-bundled)
+#             PyPI wheel, that wheel does NOT carry +cu126 and the pin fails.
+#             We also export UV_INDEX_URL globally so EVERY uv pip install in
+#             this script sees the cu126 channel as primary.
 #   - vllm:   >=0.8.3, <0.11. The rllm-pinned verl fork was developed against
 #             vllm 0.8–0.10 and uses APIs (`vllm.worker.worker_base`,
 #             `vllm.lora.models.LoRAModel`, `vllm.inputs.SingletonInputs`)
@@ -21,6 +24,35 @@ set -euo pipefail
 
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 [ -f "$REPO/env.sh" ] && source "$REPO/env.sh"
+
+# --------------------------------------------------------------------
+# Preflight: refuse to start unless nvcc is 12.6.x. We pin torch to a
+# cu126 build below; running this script against a different toolkit
+# (e.g. 12.4, 12.8, 13.x) produces ABI mismatches at flash-attn build
+# time or silent runtime crashes in kernels — both 45+ min into the
+# install. Failing fast here costs 5 s.
+# --------------------------------------------------------------------
+NVCC_VER=$(nvcc --version 2>/dev/null | grep -oP 'release \K[0-9.]+' | head -1 || true)
+case "${NVCC_VER:-}" in
+    12.6*) echo "==> nvcc preflight OK: $NVCC_VER" ;;
+    "")    echo "FATAL: nvcc not on PATH. Install CUDA 12.6 toolkit and re-run." >&2
+           echo "       hint: export PATH=/usr/local/cuda-12.6/bin:\$PATH" >&2
+           exit 1 ;;
+    *)     echo "FATAL: nvcc is ${NVCC_VER}, this script requires 12.6.x." >&2
+           echo "       torch wheels are pinned to cu126; different toolkit -> ABI mismatches." >&2
+           echo "       hint: export PATH=/usr/local/cuda-12.6/bin:\$PATH" >&2
+           exit 1 ;;
+esac
+
+# --------------------------------------------------------------------
+# Force EVERY uv pip install in this script to see the cu126 channel
+# as the primary index, with PyPI as fallback. With uv's default
+# first-index strategy this means: for `torch` (which the cu126 channel
+# hosts), uv picks the cu126 wheel; for `vllm`/`transformers`/etc.
+# (PyPI-only), uv falls back to PyPI transparently.
+# --------------------------------------------------------------------
+export UV_INDEX_URL="https://download.pytorch.org/whl/cu126"
+export UV_EXTRA_INDEX_URL="https://pypi.org/simple"
 
 # Logs go under rl_smoke/ to keep them separate from sft_smoke/.
 LOG_DIR=$REPO/rl_smoke/logs
@@ -55,15 +87,36 @@ uv venv --python 3.10 --clear .venv
 source .venv/bin/activate
 
 # --------------------------------------------------------------------
-# 3. Pre-install torch + vllm pinned together so downstream resolves
-#    can't drift the stack to cu13/newer-vllm.
+# 3a. Install torch FIRST, alone, hard-pinned to a cu126 build.
+#     Pinning to the local-version label (`+cu126`) is what makes this
+#     robust: the cu128/cu13x wheels on the default PyPI channel are
+#     plain `2.8.0` (no local label) and can't match `==2.8.0+cu126`,
+#     so even if a later joint resolve re-considers torch it can't
+#     silently substitute a cu128 wheel.
 # --------------------------------------------------------------------
-echo "==> Pre-installing torch + vllm (cu126, vllm < 0.11)"
-uv pip install \
-    'torch>=2.7,<2.9' \
-    'vllm>=0.8.3,<0.11' \
-    --index-url https://download.pytorch.org/whl/cu126 \
-    --extra-index-url https://pypi.org/simple
+echo "==> Installing torch==2.8.0+cu126 (cu126 channel, hard-pinned)"
+uv pip install 'torch==2.8.0+cu126'
+
+# Assert the install matches our toolkit BEFORE we spend 30 min on a
+# flash-attn build that would otherwise mismatch.
+echo "==> Verifying torch picked up cu126"
+python - <<'PY'
+import sys, torch
+v = torch.version.cuda
+if v != "12.6":
+    sys.stderr.write(f"FATAL: torch installed with cuda={v}, expected 12.6.\n")
+    sys.stderr.write("       cu126 pin failed — check UV_INDEX_URL and the wheel actually fetched.\n")
+    sys.exit(2)
+print(f"OK: torch {torch.__version__} cuda={v}")
+PY
+
+# --------------------------------------------------------------------
+# 3. Install vllm now that torch is locked. vllm is PyPI-only so uv
+#    will fall through to the extra index automatically; with torch
+#    already satisfied, vllm's resolver leaves it alone.
+# --------------------------------------------------------------------
+echo "==> Installing vllm (PyPI; torch already pinned)"
+uv pip install 'vllm>=0.8.3,<0.11'
 
 # Build essentials (needed under --no-build-isolation).
 # setuptools<81: verl's __init__.py uses `import pkg_resources` which
@@ -170,8 +223,14 @@ bash "$REPO/apply_patches_rl.sh"
 # --------------------------------------------------------------------
 echo "==> Sanity check"
 python - <<'PY'
-import torch
+import sys, torch
 print(f"torch          {torch.__version__}  cuda={torch.version.cuda}  gpus={torch.cuda.device_count()}")
+# Final guardrail: a downstream install must not have replaced our cu126
+# torch with a plain cu128 wheel. Hard-fail if it has.
+if torch.version.cuda != "12.6":
+    sys.stderr.write(f"FATAL: post-install torch cuda is {torch.version.cuda}, expected 12.6.\n")
+    sys.stderr.write("       Something later in this script clobbered the cu126 pin.\n")
+    sys.exit(2)
 import vllm
 print(f"vllm           {vllm.__version__}")
 import rllm
