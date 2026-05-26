@@ -70,6 +70,17 @@ def main() -> int:
                            "must be 12.6.x — torch is hard-pinned to cu126")
         except Exception as e:
             fails += check(False, "nvcc version parse", f"{type(e).__name__}: {e}")
+
+    # Python development headers — Triton/Inductor JIT-compiles a small
+    # cuda_utils.c at vLLM startup that #include <Python.h>. Without the
+    # headers, vLLM's engine dies on the first rollout with an opaque
+    # EngineDeadError and the trainer hangs on dead ray actors.
+    import sysconfig
+    py_inc = sysconfig.get_path("include")
+    py_h = Path(py_inc) / "Python.h" if py_inc else None
+    fails += check(py_h is not None and py_h.exists(),
+                   f"Python.h present at {py_inc}",
+                   "install python3.10-dev (apt) so Triton can JIT cuda_utils.c")
     try:
         n_gpus = int(subprocess.check_output(
             ["nvidia-smi", "--query-gpu=index", "--format=csv,noheader"]

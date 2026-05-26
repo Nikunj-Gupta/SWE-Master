@@ -9,10 +9,10 @@
 #
 # Knobs (env overridable):
 #   MODEL           — base model HF id  (default: Qwen/Qwen2.5-Coder-1.5B-Instruct)
-#   N_GPUS          — GPUs to use       (default: 2)
+#   N_GPUS          — GPUs to use       (default: all visible to nvidia-smi, else 2)
 #   PROMPT_LEN      — max prompt tokens (default: 2048)
 #   RESP_LEN        — max response tok  (default: 2048)
-#   BATCH_SIZE      — train batch       (default: 2)
+#   BATCH_SIZE      — train batch       (default: N_GPUS, must be ≥ N_GPUS)
 #   AGENT_MAX_STEPS — agent steps/traj  (default: 3)
 set -euo pipefail
 
@@ -33,7 +33,12 @@ ln -sfn "$(basename "$LOG")" "$LOG_DIR/rl_dryrun_latest.log"
 
 # Knobs
 MODEL=${MODEL:-Qwen/Qwen2.5-Coder-1.5B-Instruct}
-N_GPUS=${N_GPUS:-2}
+# Default to every GPU `nvidia-smi -L` reports. Hard fallback to 2 if
+# nvidia-smi isn't on PATH or returns nothing (e.g., CPU-only host doing
+# a parse-only smoke). Override via `N_GPUS=N bash run_rl_dryrun.sh`.
+_DETECTED_GPUS=$(nvidia-smi -L 2>/dev/null | grep -c "^GPU " || true)
+N_GPUS=${N_GPUS:-${_DETECTED_GPUS:-2}}
+[ "${N_GPUS:-0}" -ge 1 ] || N_GPUS=2
 # Context budgets sized to match Qwen2.5-Coder-1.5B's 32K window with room
 # for multi-turn agent trajectories. The previous 2K/2K combo was breaking
 # at compute_log_prob (real trajectories had max_seq_len=6619).
@@ -43,7 +48,18 @@ RESP_LEN=${RESP_LEN:-8192}
 # We use 4× (PROMPT_LEN+RESP_LEN) so even the longest unrolled trajectory
 # from agent.max_steps turns has headroom.
 PPO_MAX_TOKEN_LEN=${PPO_MAX_TOKEN_LEN:-$((4 * (PROMPT_LEN + RESP_LEN)))}
-BATCH_SIZE=${BATCH_SIZE:-2}
+# BATCH_SIZE feeds both data.train_batch_size and actor.ppo_mini_batch_size.
+# verl normalizes ppo_mini_batch_size by world_size/(tp*ulysses); with
+# integer division, BATCH_SIZE < N_GPUS collapses it to 0 and aborts with
+# `AssertionError: ppo_mini_batch_size 0 should be larger than 0 after
+# normalization`. Default to N_GPUS so the smoke scales correctly with
+# whatever hardware nvidia-smi sees.
+BATCH_SIZE=${BATCH_SIZE:-$N_GPUS}
+if [ "$BATCH_SIZE" -lt "$N_GPUS" ]; then
+    echo "FATAL: BATCH_SIZE=$BATCH_SIZE < N_GPUS=$N_GPUS; verl would normalize" >&2
+    echo "       ppo_mini_batch_size to 0. Set BATCH_SIZE >= $N_GPUS." >&2
+    exit 1
+fi
 AGENT_MAX_STEPS=${AGENT_MAX_STEPS:-3}
 # 1 = "is the plumbing correct" smoke; 10+ = real loss curve.
 TOTAL_STEPS=${TOTAL_STEPS:-1}
