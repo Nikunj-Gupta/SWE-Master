@@ -147,6 +147,8 @@ def main() -> int:
     for tag, target, required in [
         ("# patched-by: patch_rllm_ray_init.py",
          "DeepSWE_RL/rllm/rllm/trainer/verl/train_agent_ppo.py", True),
+        ("# patched-by: patch_rllm_skip_final_val.py",
+         "DeepSWE_RL/rllm/rllm/trainer/verl/agent_ppo_trainer.py", True),
     ]:
         p = REPO / target
         if not p.exists():

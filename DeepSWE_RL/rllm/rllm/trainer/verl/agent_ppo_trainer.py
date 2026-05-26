@@ -448,7 +448,11 @@ class AgentPPOTrainer(RayPPOTrainer):
 
                 if self.global_steps >= self.total_training_steps:
                     # perform validation after training
-                    if self.val_reward_fn is not None:
+                    # patched-by: patch_rllm_skip_final_val.py
+                    # Gate on test_freq>0 (matches periodic check on line 430).
+                    # Without this, test_freq=-1 still triggers a full final
+                    # validation pass after the last training step.
+                    if self.val_reward_fn is not None and self.config.trainer.test_freq > 0:
                         val_metrics = self._validate_agent()
                         pprint(f"Final validation metrics: {val_metrics}")
                         logger.log(data=val_metrics, step=self.global_steps)

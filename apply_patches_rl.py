@@ -12,7 +12,15 @@ Patches:
                                           isolated virtualenv per worker
                                           and tries to pip-install ~20
                                           packages with no pip in the venv.
-  2. patch_rllm_wake_up_dispatch.py    — route rllm's direct
+  2. patch_rllm_skip_final_val.py      — gate the post-training "final
+                                          validation" in fit_agent on
+                                          `test_freq > 0`. Otherwise
+                                          `test_freq=-1` only disables the
+                                          periodic check, and the final
+                                          val pass still runs the entire
+                                          val dataloader (5h on a 1-step
+                                          smoke against SWE-Bench-Verified).
+  3. patch_rllm_wake_up_dispatch.py    — route rllm's direct
                                           self.rollout_engine.wake_up()
                                           calls through RayWorkerGroup's
                                           execute_all_sync(). Without this,
@@ -40,6 +48,13 @@ PATCHES = [
         "target": "DeepSWE_RL/rllm/rllm/trainer/verl/train_agent_ppo.py",
         "sentinel": "# patched-by: patch_rllm_ray_init.py",
         "reason": "Drop ray.init pip runtime_env clause + placeholder WANDB_API_KEY",
+    },
+    {
+        "id": "rllm_skip_final_val",
+        "script": "data_preparation/patch_rllm_skip_final_val.py",
+        "target": "DeepSWE_RL/rllm/rllm/trainer/verl/agent_ppo_trainer.py",
+        "sentinel": "# patched-by: patch_rllm_skip_final_val.py",
+        "reason": "Gate end-of-training validation on test_freq>0 (matches periodic gate)",
     },
     # NOTE: patch_rllm_wake_up_dispatch.py was tried but is the wrong fix.
     # The actual cure is to set actor_rollout_ref.rollout.mode=async in the
