@@ -46,13 +46,20 @@ esac
 
 # --------------------------------------------------------------------
 # Force EVERY uv pip install in this script to see the cu126 channel
-# as the primary index, with PyPI as fallback. With uv's default
-# first-index strategy this means: for `torch` (which the cu126 channel
-# hosts), uv picks the cu126 wheel; for `vllm`/`transformers`/etc.
-# (PyPI-only), uv falls back to PyPI transparently.
+# alongside PyPI. We use --index-strategy=unsafe-best-match because uv's
+# default `first-index` strategy refuses to "fall through" to a second
+# index for a package that exists on the first — i.e. with PyPI in the
+# mix, uv finds plain `torch==2.8.0` on PyPI and rejects our pin to
+# `torch==2.8.0+cu126` instead of looking at the cu126 channel:
+#   "torch was found on https://pypi.org/simple, but not at the
+#    requested version (torch==2.8.0+cu126)."
+# `unsafe-best-match` tells uv to consider ALL versions from ALL indexes;
+# the `+cu126` local-version label in the pin then guarantees only the
+# right wheel matches. Safe here because both indexes are first-party.
 # --------------------------------------------------------------------
 export UV_INDEX_URL="https://download.pytorch.org/whl/cu126"
 export UV_EXTRA_INDEX_URL="https://pypi.org/simple"
+export UV_INDEX_STRATEGY="unsafe-best-match"
 
 # Logs go under rl_smoke/ to keep them separate from sft_smoke/.
 LOG_DIR=$REPO/rl_smoke/logs
