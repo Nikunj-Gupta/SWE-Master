@@ -119,6 +119,15 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:False
 # wake_up dispatch is broken; the async path is the one that actually works.)
 export VLLM_USE_V1=1
 export HYDRA_FULL_ERROR=1
+
+# Multi-node NCCL config — see notes in patched train_agent_ppo.py.
+# NCCL otherwise picks an IPv6 link-local address that can't route across
+# nodes (\"socketStartConnect: connect to fe80::... Network is unreachable\").
+# Forcing AF_INET selects the IPv4 path; IB_DISABLE=1 skips InfiniBand
+# (we're on plain ethernet). Defaults take effect only on multi-node;
+# single-node FSDP uses loopback and doesn't care.
+export NCCL_SOCKET_FAMILY=\${NCCL_SOCKET_FAMILY:-AF_INET}
+export NCCL_IB_DISABLE=\${NCCL_IB_DISABLE:-1}
 $([ -n "${WANDB_API_KEY:-}" ] && echo "export WANDB_API_KEY='$WANDB_API_KEY'")
 
 python -m rllm.trainer.verl.train_agent_ppo \\

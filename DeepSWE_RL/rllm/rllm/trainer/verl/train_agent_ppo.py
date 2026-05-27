@@ -40,6 +40,17 @@ def run_ppo_agent(config):
             _v = os.environ.get(_k)
             if _v is not None:
                 _ray_env[_k] = _v
+        # Forward NCCL_* env vars to workers. Without this, multi-node FSDP
+        # fails at process-group init because NCCL auto-picks an interface
+        # (often an IPv6 link-local) that can't route to the peer node:
+        #   socketStartConnect: connect to fe80::...%51351<45329> failed :
+        #   Network is unreachable
+        # The launching shell sets NCCL_SOCKET_FAMILY=AF_INET and
+        # NCCL_IB_DISABLE=1; this loop propagates them (plus any other
+        # NCCL_* the user exports for tuning).
+        for _k in list(os.environ):
+            if _k.startswith("NCCL_") and _k not in _ray_env:
+                _ray_env[_k] = os.environ[_k]
         ray.init(runtime_env={"working_dir": "./DeepSWE_RL/rllm/verl",
                               "env_vars": _ray_env})
 
