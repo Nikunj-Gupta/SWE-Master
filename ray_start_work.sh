@@ -29,6 +29,25 @@ echo "       HEAD       = $HEAD_IP:$HEAD_PORT"
 echo "       NUM_GPUS   = $NUM_GPUS"
 echo
 
+# Raise the open-files soft limit before starting the raylet. Ray + vLLM
+# across nodes open thousands of sockets; the default soft limit of 1024
+# makes the raylet SIGABRT during vLLM engine-core launch with
+# "open: Too many open files". The raylet inherits this shell's limit, so
+# we must set it here (a non-root user can raise soft up to the hard cap).
+_hard_nofile=$(ulimit -Hn)
+if [ "$_hard_nofile" = "unlimited" ]; then
+    ulimit -n 1048576 2>/dev/null || true
+elif [ "${_hard_nofile:-0}" -gt "$(ulimit -Sn)" ] 2>/dev/null; then
+    ulimit -n "$_hard_nofile" 2>/dev/null || true
+fi
+echo "==> open-files limit: soft=$(ulimit -Sn) hard=$(ulimit -Hn)"
+if [ "$(ulimit -Sn)" != "unlimited" ] && [ "$(ulimit -Sn)" -lt 65536 ]; then
+    echo "    WARNING: soft limit < 65536 and can't be raised (hard cap too low)." >&2
+    echo "    The raylet may SIGABRT under multi-node vLLM load. To fix, a root" >&2
+    echo "    user must raise the hard limit, e.g. in /etc/security/limits.conf:" >&2
+    echo "        $USER  hard  nofile  1048576" >&2
+fi
+
 # Match the head's health-check tolerance — see ray_start_head.sh for
 # the rationale. Without this, the runtime_env zip unpack from the first
 # trainer launch starves this raylet's heartbeat loop and GCS kills it
