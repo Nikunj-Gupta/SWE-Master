@@ -29,6 +29,13 @@ echo "       HEAD       = $HEAD_IP:$HEAD_PORT"
 echo "       NUM_GPUS   = $NUM_GPUS"
 echo
 
+# Match the head's health-check tolerance — see ray_start_head.sh for
+# the rationale. Without this, the runtime_env zip unpack from the first
+# trainer launch starves this raylet's heartbeat loop and GCS kills it
+# at ~5 s with "GCS failed to check the health of this node for 5 times".
+export RAY_health_check_failure_threshold=${RAY_health_check_failure_threshold:-60}
+export RAY_health_check_initial_delay_ms=${RAY_health_check_initial_delay_ms:-30000}
+
 ray start --address="$HEAD_IP:$HEAD_PORT" --num-gpus="$NUM_GPUS"
 
 echo

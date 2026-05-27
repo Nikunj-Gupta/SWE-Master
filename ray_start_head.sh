@@ -47,6 +47,15 @@ echo "       PORT           = $PORT"
 echo "       DASHBOARD_PORT = $DASHBOARD_PORT"
 echo
 
+# Raise GCS<->raylet health-check tolerance. Default is 5 misses at 1 s
+# intervals → ~5 s before a node is marked dead. When the trainer first
+# launches, Ray pushes the runtime_env zip (DeepSWE_RL/rllm/verl, ~hundreds
+# of MB) to every worker; unpacking it can starve the raylet's heartbeat
+# loop for >5 s and the worker gets killed. 60 misses (~1 min grace)
+# survives that without sacrificing real-failure detection.
+export RAY_health_check_failure_threshold=${RAY_health_check_failure_threshold:-60}
+export RAY_health_check_initial_delay_ms=${RAY_health_check_initial_delay_ms:-30000}
+
 ray start --head \
     --node-ip-address "$HEAD_IP" \
     --num-gpus "$NUM_GPUS" \
