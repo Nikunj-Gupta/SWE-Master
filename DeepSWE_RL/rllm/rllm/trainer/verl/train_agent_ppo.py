@@ -29,9 +29,20 @@ def run_ppo_agent(config):
         # parent shell. The inherited keys are critical for vLLM's Inductor
         # JIT compile path (needs CUDA_HOME, LIBRARY_PATH=$CUDA_HOME/lib64/stubs
         # to link `-lcuda`, LD_LIBRARY_PATH for the cu* runtime libs).
+        # PYTHONPATH must be the ABSOLUTE path to the on-disk rllm package
+        # root, not "./DeepSWE_RL/rllm". A relative path gets resolved by Ray
+        # workers relative to the runtime_env working_dir package, which can
+        # be a STALE cached upload (Ray reuses a content-hash package across
+        # sessions). That stale copy shadowed the real rllm and lacked newer
+        # submodules -> "ModuleNotFoundError: No module named
+        # 'rllm.environments.base'". Deriving from __file__ (this file is
+        # <root>/rllm/trainer/verl/train_agent_ppo.py) is CWD-independent and,
+        # since every node mounts the repo at the same path, valid clusterwide.
+        _rllm_root = os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.dirname(os.path.abspath(__file__)))))
         _ray_env = {"TOKENIZERS_PARALLELISM": "true",
                     "NCCL_DEBUG": "WARN",
-                    "PYTHONPATH": "./DeepSWE_RL/rllm"}
+                    "PYTHONPATH": _rllm_root}
         for _k in ("CUDA_HOME", "LIBRARY_PATH", "LD_LIBRARY_PATH",
                    "HF_HOME", "TRITON_CACHE_DIR", "TORCH_EXTENSIONS_DIR",
                    "VLLM_USE_V1", "VLLM_ATTENTION_BACKEND",
