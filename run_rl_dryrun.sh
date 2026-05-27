@@ -9,10 +9,13 @@
 #
 # Knobs (env overridable):
 #   MODEL           — base model HF id  (default: Qwen/Qwen2.5-Coder-1.5B-Instruct)
-#   N_GPUS          — GPUs to use       (default: all visible to nvidia-smi, else 2)
+#   NNODES          — number of Ray nodes (default: 1). For multi-node, start
+#                     Ray with ray_start_head.sh / ray_start_work.sh FIRST,
+#                     then run this with NNODES=<total>.
+#   N_GPUS          — GPUs per node     (default: all visible to nvidia-smi, else 2)
 #   PROMPT_LEN      — max prompt tokens (default: 2048)
 #   RESP_LEN        — max response tok  (default: 2048)
-#   BATCH_SIZE      — train batch       (default: N_GPUS, must be ≥ N_GPUS)
+#   BATCH_SIZE      — train batch       (default: NNODES*N_GPUS, must be ≥ that)
 #   AGENT_MAX_STEPS — agent steps/traj  (default: 3)
 set -euo pipefail
 
@@ -33,12 +36,14 @@ ln -sfn "$(basename "$LOG")" "$LOG_DIR/rl_dryrun_latest.log"
 
 # Knobs
 MODEL=${MODEL:-Qwen/Qwen2.5-Coder-1.5B-Instruct}
+NNODES=${NNODES:-1}
 # Default to every GPU `nvidia-smi -L` reports. Hard fallback to 2 if
 # nvidia-smi isn't on PATH or returns nothing (e.g., CPU-only host doing
 # a parse-only smoke). Override via `N_GPUS=N bash run_rl_dryrun.sh`.
 _DETECTED_GPUS=$(nvidia-smi -L 2>/dev/null | grep -c "^GPU " || true)
 N_GPUS=${N_GPUS:-${_DETECTED_GPUS:-2}}
 [ "${N_GPUS:-0}" -ge 1 ] || N_GPUS=2
+WORLD_SIZE=$((NNODES * N_GPUS))
 # Context budgets sized to match Qwen2.5-Coder-1.5B's 32K window with room
 # for multi-turn agent trajectories. The previous 2K/2K combo was breaking
 # at compute_log_prob (real trajectories had max_seq_len=6619).
@@ -50,14 +55,15 @@ RESP_LEN=${RESP_LEN:-8192}
 PPO_MAX_TOKEN_LEN=${PPO_MAX_TOKEN_LEN:-$((4 * (PROMPT_LEN + RESP_LEN)))}
 # BATCH_SIZE feeds both data.train_batch_size and actor.ppo_mini_batch_size.
 # verl normalizes ppo_mini_batch_size by world_size/(tp*ulysses); with
-# integer division, BATCH_SIZE < N_GPUS collapses it to 0 and aborts with
+# integer division, BATCH_SIZE < WORLD_SIZE collapses it to 0 and aborts with
 # `AssertionError: ppo_mini_batch_size 0 should be larger than 0 after
-# normalization`. Default to N_GPUS so the smoke scales correctly with
-# whatever hardware nvidia-smi sees.
-BATCH_SIZE=${BATCH_SIZE:-$N_GPUS}
-if [ "$BATCH_SIZE" -lt "$N_GPUS" ]; then
-    echo "FATAL: BATCH_SIZE=$BATCH_SIZE < N_GPUS=$N_GPUS; verl would normalize" >&2
-    echo "       ppo_mini_batch_size to 0. Set BATCH_SIZE >= $N_GPUS." >&2
+# normalization`. Default to WORLD_SIZE (= NNODES * N_GPUS) so the smoke
+# scales correctly across single- and multi-node setups alike.
+BATCH_SIZE=${BATCH_SIZE:-$WORLD_SIZE}
+if [ "$BATCH_SIZE" -lt "$WORLD_SIZE" ]; then
+    echo "FATAL: BATCH_SIZE=$BATCH_SIZE < world_size=$WORLD_SIZE (NNODES=$NNODES * N_GPUS=$N_GPUS);" >&2
+    echo "       verl would normalize ppo_mini_batch_size to 0." >&2
+    echo "       Set BATCH_SIZE >= $WORLD_SIZE." >&2
     exit 1
 fi
 AGENT_MAX_STEPS=${AGENT_MAX_STEPS:-3}
@@ -153,7 +159,7 @@ python -m rllm.trainer.verl.train_agent_ppo \\
     trainer.experiment_name='$EXP_NAME' \\
     trainer.val_before_train=False \\
     trainer.n_gpus_per_node=$N_GPUS \\
-    trainer.nnodes=1 \\
+    trainer.nnodes=$NNODES \\
     trainer.save_freq=-1 \\
     trainer.test_freq=-1 \\
     trainer.total_epochs=1 \\
@@ -175,7 +181,9 @@ echo "==> rllm venv:      $RLLM_VENV"
 echo "==> train parquet:  $TRAIN_FILE"
 echo "==> val parquet:    $VAL_FILE"
 echo "==> model:          $MODEL"
-echo "==> n_gpus:         $N_GPUS"
+echo "==> nnodes:         $NNODES"
+echo "==> n_gpus/node:    $N_GPUS"
+echo "==> world_size:     $WORLD_SIZE"
 echo "==> prompt_len:     $PROMPT_LEN"
 echo "==> resp_len:       $RESP_LEN"
 echo "==> ppo_max_tok_pg: $PPO_MAX_TOKEN_LEN"
