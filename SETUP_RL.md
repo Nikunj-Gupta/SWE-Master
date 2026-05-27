@@ -148,6 +148,75 @@ Log: `rl_smoke/logs/rl_dryrun_<TS>.log` (symlink: `rl_dryrun_latest.log`).
 
 ---
 
+## Step 7 — Multi-node smoke (optional)
+
+The same dry-run runs across multiple nodes. We validated it green on **2
+nodes × 4 GPUs** (two RTX 6000 Ada boxes on a shared 10 GbE LAN). The trainer
+code path is multi-node native (verl); the work is all cluster bring-up.
+
+### Bring up the Ray cluster
+
+```bash
+# On the HEAD node (pick one box; its IP is what workers dial)
+HEAD_IP=<head-ip> NUM_GPUS=<gpus-here> bash ray_start_head.sh
+
+# On EACH WORKER node — run inside screen/tmux so the raylet survives ssh exit
+screen -S ray-worker
+HEAD_IP=<head-ip> HEAD_PORT=8266 NUM_GPUS=<gpus-here> bash ray_start_work.sh
+# Ctrl-A D to detach
+
+# Back on the head — confirm all nodes contributed GPUs (not just the head's)
+source DeepSWE_RL/.venv/bin/activate
+ray status                                  # expect total = sum of all nodes
+python -c "import ray; ray.init(address='auto'); \
+  print('GPUs', ray.cluster_resources().get('GPU'))"
+```
+
+`ray status` listing a node as **Active** is *not* enough — a node can be
+"active" while contributing 0 resources (its raylet died). Always confirm
+`cluster_resources()['GPU']` equals the true total before launching.
+
+### Launch
+
+```bash
+# On the head node
+NNODES=<total-nodes> N_GPUS=<gpus-per-node> bash run_rl_dryrun.sh
+```
+
+`BATCH_SIZE` auto-scales to `NNODES * N_GPUS` (verl normalizes
+`ppo_mini_batch_size` by world size; a smaller batch collapses it to 0).
+
+### The four gotchas (all hit on first bring-up, all fixed in the scripts)
+
+Every one of these surfaced on the **worker** node, because it was a stricter /
+more contended environment than the head. The fixes are baked into
+`ray_start_{head,work}.sh` and the rllm patches; the firewall one is a host
+config change you must make yourself.
+
+| # | Symptom in logs | Root cause | Fix |
+|---|---|---|---|
+| 1 | `[UFW BLOCK] ... DPT=<high port> ... SYN` in `dmesg`; worker joins then raylet dies; `cluster_resources` shows only head's GPUs | UFW on the worker drops Ray's **dynamic** ports (the join port 8266 is open, the rest aren't) | `sudo ufw allow from <head-ip>` on each worker (and reverse on head if it firewalls too). **Not in repo** — redo if UFW is reset. |
+| 2 | `(raylet) ... open: Too many open files` then `SIGABRT`, during vLLM engine-core launch | Worker's open-files **soft limit was 1024** (default); Ray+vLLM open thousands of sockets | `ray_start_*.sh` now raises soft → hard nofile before `ray start`. If the hard cap is also low, root must set `/etc/security/limits.conf`. |
+| 3 | `socketStartConnect: connect to fe80::...  Network is unreachable`; `ncclSystemError` at process-group init | NCCL auto-picked an **IPv6 link-local** interface that can't route across nodes | `run_rl_dryrun.sh` exports `NCCL_SOCKET_FAMILY=AF_INET` + `NCCL_IB_DISABLE=1`; patched `train_agent_ppo.py` forwards `NCCL_*` to workers |
+| 4 | `GCS failed to check the health of this node for N times` → worker raylet self-exits ~2 min into launch | runtime_env zip unpack starves the raylet heartbeat past the default ~5 s | `ray_start_*.sh` sets `RAY_health_check_failure_threshold=60` + 30 s initial delay |
+
+### Performance note
+
+Per-step wall was **~160 s on 2 nodes** vs ~144 s on a single 4-GPU node — the
+extra ~20 s is cross-node NCCL all-reduce in `update_actor` over the 10 GbE
+LAN. Multi-node helps throughput (8 trajectories/step vs 4) but each gradient
+sync pays a network tax; on commodity ethernet (not InfiniBand) don't expect
+linear scaling. See `## Performance` below for the single-node breakdown.
+
+### Teardown
+
+```bash
+# On every node
+ray stop --force
+```
+
+---
+
 ## "Where am I" snapshot
 
 For any debugging session, this one command captures the relevant state:
